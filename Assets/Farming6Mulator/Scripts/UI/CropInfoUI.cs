@@ -12,7 +12,13 @@ public class CropInfoUI : MonoBehaviour
 
     [SerializeField] private Button deleteButton;
 
+    [Header("World Position")]
+    [SerializeField] private Transform playerCamera;
+    [SerializeField] private Vector3 worldOffset = new Vector3(0f, 1.2f, 0f);
+
     private CropInstance currentCrop;
+
+    public bool IsOpen => panel != null && panel.activeSelf;
 
     private void Awake()
     {
@@ -20,6 +26,23 @@ public class CropInfoUI : MonoBehaviour
             deleteButton.onClick.AddListener(DeleteSelectedCrop);
 
         Hide();
+    }
+
+    private void LateUpdate()
+    {
+        if (currentCrop == null || panel == null || !panel.activeSelf)
+            return;
+
+        transform.position = currentCrop.transform.position + worldOffset;
+
+        if (playerCamera == null)
+            return;
+
+        Vector3 direction = transform.position - playerCamera.position;
+        direction.y = 0f;
+
+        if (direction.sqrMagnitude > 0.001f)
+            transform.rotation = Quaternion.LookRotation(direction);
     }
 
     public void Show(CropInstance crop)
@@ -32,9 +55,14 @@ public class CropInfoUI : MonoBehaviour
         if (panel != null)
             panel.SetActive(true);
 
-        cropNameText.text = crop.Data.cropName;
-        incomeText.text = "Income: $" + crop.Data.incomePerSecond.ToString("0.##") + "/sec";
-        refundText.text = "Refund: $" + crop.GetRefund().ToString("0");
+        if (cropNameText != null)
+            cropNameText.text = crop.Data.cropName;
+
+        if (incomeText != null)
+            incomeText.text = "Income: $" + crop.Data.incomePerSecond.ToString("0.##") + "/sec";
+
+        if (refundText != null)
+            refundText.text = "Refund: $" + crop.GetRefund().ToString("0");
     }
 
     public void Hide()

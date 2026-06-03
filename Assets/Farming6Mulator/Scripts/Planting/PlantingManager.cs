@@ -1,5 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using TMPro;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -13,14 +12,14 @@ public class PlantingManager : MonoBehaviour
     [SerializeField] private CropIncomeManager incomeManager;
     [SerializeField] private CropInfoUI cropInfoUI;
     [SerializeField] private PlayerHUD playerHUD;
+    [SerializeField] private PlantingZone[] plantingZones;
 
     [Header("Input")]
     [SerializeField] private InputActionReference plantAction;
     [SerializeField] private InputActionReference toggleInventoryAction;
-    [SerializeField] private InputActionReference selectCropAction;
 
     [Header("UI")]
-    [SerializeField] private GameObject inventoryPanel;
+    [SerializeField] private InventoryWorldUI inventoryUI;
 
     [Header("Raycast")]
     [SerializeField] private float maxDistance = 10f;
@@ -28,21 +27,27 @@ public class PlantingManager : MonoBehaviour
     [SerializeField] private LayerMask cropMask;
 
     private CropData selectedCrop;
-    private int selectedIndex;
-    private float nextSelectionTime;
-
     private GameObject phantomInstance;
     private CropData phantomCrop;
-
-    public event Action<CropData> SelectedCropChanged;
 
     private void OnEnable()
     {
         if (plantAction != null)
+        {
+            plantAction.action.Enable();
             plantAction.action.performed += OnPlantAction;
+        }
 
         if (toggleInventoryAction != null)
+        {
+            toggleInventoryAction.action.Enable();
             toggleInventoryAction.action.performed += OnToggleInventoryAction;
+        }
+
+        if (plantingCapacity != null)
+            plantingCapacity.CapacityChanged += RefreshZoneVisuals;
+
+        RefreshZoneVisuals();
     }
 
     private void OnDisable()
@@ -52,83 +57,73 @@ public class PlantingManager : MonoBehaviour
 
         if (toggleInventoryAction != null)
             toggleInventoryAction.action.performed -= OnToggleInventoryAction;
+
+        if (plantingCapacity != null)
+            plantingCapacity.CapacityChanged -= RefreshZoneVisuals;
     }
 
     private void Update()
     {
-        HandleCropSelection();
         UpdatePhantom();
     }
 
-    private void OnPlantAction(InputAction.CallbackContext context)
+    public void SelectCrop(CropData crop)
     {
-        TryInteract();
-    }
-
-    private void OnToggleInventoryAction(InputAction.CallbackContext context)
-    {
-        if (inventoryPanel == null)
-            return;
-
-        inventoryPanel.SetActive(!inventoryPanel.activeSelf);
-    }
-
-    private void HandleCropSelection()
-    {
-        if (inventory == null || selectCropAction == null)
-            return;
-
-        List<CropData> crops = inventory.GetOwnedCrops();
-
-        if (crops.Count == 0)
-        {
-            SetSelectedCrop(null);
-            return;
-        }
-
-        if (selectedCrop == null || !crops.Contains(selectedCrop))
-        {
-            selectedIndex = 0;
-            SetSelectedCrop(crops[selectedIndex]);
-            return;
-        }
-
-        Vector2 input = selectCropAction.action.ReadValue<Vector2>();
-
-        if (Time.time < nextSelectionTime)
-            return;
-
-        if (input.x > 0.6f)
-        {
-            selectedIndex++;
-            if (selectedIndex >= crops.Count)
-                selectedIndex = 0;
-
-            SetSelectedCrop(crops[selectedIndex]);
-            nextSelectionTime = Time.time + 0.25f;
-        }
-        else if (input.x < -0.6f)
-        {
-            selectedIndex--;
-            if (selectedIndex < 0)
-                selectedIndex = crops.Count - 1;
-
-            SetSelectedCrop(crops[selectedIndex]);
-            nextSelectionTime = Time.time + 0.25f;
-        }
-    }
-
-    private void SetSelectedCrop(CropData crop)
-    {
-        if (selectedCrop == crop)
-            return;
-
         selectedCrop = crop;
 
         if (playerHUD != null)
             playerHUD.SetSelectedCrop(selectedCrop);
 
-        SelectedCropChanged?.Invoke(selectedCrop);
+        if (inventoryUI != null)
+            inventoryUI.Close();
+
+        if (cropInfoUI != null)
+            cropInfoUI.Hide();
+    }
+
+    public void ClearSelectedCrop()
+    {
+        selectedCrop = null;
+
+        if (playerHUD != null)
+            playerHUD.SetSelectedCrop(null);
+
+        ClearPhantom();
+    }
+
+    private void OnPlantAction(InputAction.CallbackContext context)
+    {
+        if (IsBlockingWorldInteraction())
+            return;
+
+        TryInteract();
+    }
+
+    private void OnToggleInventoryAction(InputAction.CallbackContext context)
+    {
+        Debug.Log("QUEST TOGGLE INVENTORY DETECTED");
+        
+        if (inventoryUI == null)
+        {
+            Debug.LogError("Inventory UI is not assigned in PlantingManager");
+            return;
+        }
+
+        inventoryUI.Toggle();
+
+        if (inventoryUI.IsOpen && cropInfoUI != null)
+            cropInfoUI.Hide();
+    }
+
+    private bool IsBlockingWorldInteraction()
+    {
+        if (inventoryUI != null && inventoryUI.IsOpen)
+            return true;
+
+        if (cropInfoUI != null && cropInfoUI.IsOpen)
+            return true;
+
+        return false;
     }
 
     private void TryInteract()
@@ -161,7 +156,10 @@ public class PlantingManager : MonoBehaviour
             return;
 
         if (!inventory.HasCrop(selectedCrop))
+        {
+            ClearSelectedCrop();
             return;
+        }
 
         if (!plantingCapacity.HasFreeSlot())
             return;
@@ -174,7 +172,14 @@ public class PlantingManager : MonoBehaviour
         if (zone == null)
             return;
 
-        if (!zone.CanPlant(hit.point))
+        int unlockedSlotsForThisZone = GetUnlockedSlotsForZone(zone);
+
+        if (!zone.TryGetPlantCell(
+                hit.point,
+                unlockedSlotsForThisZone,
+                out Vector3 plantPosition,
+                out int cellIndex
+            ))
             return;
 
         if (!inventory.TryRemove(selectedCrop, 1))
@@ -189,10 +194,12 @@ public class PlantingManager : MonoBehaviour
         CropInstance crop = zone.Plant(
             selectedCrop,
             hit.point,
+            unlockedSlotsForThisZone,
             Quaternion.identity,
             incomeManager,
             wallet,
-            plantingCapacity
+            plantingCapacity,
+            Camera.main != null ? Camera.main.transform : null
         );
 
         if (crop == null)
@@ -203,11 +210,22 @@ public class PlantingManager : MonoBehaviour
         }
 
         incomeManager.RegisterCrop(crop);
+
+        if (!inventory.HasCrop(selectedCrop))
+            ClearSelectedCrop();
+        else if (playerHUD != null)
+            playerHUD.SetSelectedCrop(selectedCrop);
     }
 
     private void UpdatePhantom()
     {
-        if (pointerOrigin == null || selectedCrop == null || inventory == null)
+        if (IsBlockingWorldInteraction())
+        {
+            ClearPhantom();
+            return;
+        }
+
+        if (pointerOrigin == null || selectedCrop == null || inventory == null || plantingCapacity == null)
         {
             ClearPhantom();
             return;
@@ -227,20 +245,49 @@ public class PlantingManager : MonoBehaviour
 
         PlantingZone zone = hit.collider.GetComponentInParent<PlantingZone>();
 
-        if (zone == null || !zone.CanPlant(hit.point))
+        if (zone == null)
+        {
+            ClearPhantom();
+            return;
+        }
+
+        int unlockedSlotsForThisZone = GetUnlockedSlotsForZone(zone);
+
+        if (!zone.TryGetPlantCell(
+                hit.point,
+                unlockedSlotsForThisZone,
+                out Vector3 plantPosition,
+                out int cellIndex
+            ))
         {
             ClearPhantom();
             return;
         }
 
         EnsurePhantom(selectedCrop);
+        UpdatePhantomText(selectedCrop);
 
         if (phantomInstance == null)
             return;
 
         phantomInstance.SetActive(true);
-        phantomInstance.transform.position = hit.point;
+        phantomInstance.transform.position = plantPosition;
         phantomInstance.transform.rotation = Quaternion.identity;
+    }
+    
+    private void UpdatePhantomText(CropData crop)
+    {
+        if (phantomInstance == null || crop == null)
+            return;
+
+        TMP_Text[] texts = phantomInstance.GetComponentsInChildren<TMP_Text>(true);
+
+        foreach (TMP_Text text in texts)
+        {
+            text.text = "$" + crop.incomePerSecond.ToString("0.##") + "/sec";
+            text.alignment = TextAlignmentOptions.Center;
+            text.gameObject.SetActive(true);
+        }
     }
 
     private void EnsurePhantom(CropData crop)
@@ -249,7 +296,10 @@ public class PlantingManager : MonoBehaviour
             return;
 
         if (phantomInstance != null && phantomCrop == crop)
+        {
+            UpdatePhantomText(crop);
             return;
+        }
 
         ClearPhantom();
 
@@ -261,10 +311,17 @@ public class PlantingManager : MonoBehaviour
         phantomInstance = Instantiate(prefab);
         phantomCrop = crop;
 
-        Collider[] colliders = phantomInstance.GetComponentsInChildren<Collider>();
+        Collider[] colliders = phantomInstance.GetComponentsInChildren<Collider>(true);
 
         foreach (Collider col in colliders)
             col.enabled = false;
+
+        CropInstance cropInstance = phantomInstance.GetComponent<CropInstance>();
+
+        if (cropInstance != null)
+            Destroy(cropInstance);
+
+        UpdatePhantomText(crop);
     }
 
     private void ClearPhantom()
@@ -274,5 +331,51 @@ public class PlantingManager : MonoBehaviour
 
         phantomInstance = null;
         phantomCrop = null;
+    }
+    
+    private void RefreshZoneVisuals()
+    {
+        if (plantingZones == null || plantingCapacity == null)
+            return;
+
+        int remainingSlots = plantingCapacity.MaxPlantingSlots;
+
+        for (int i = 0; i < plantingZones.Length; i++)
+        {
+            PlantingZone zone = plantingZones[i];
+
+            if (zone == null)
+                continue;
+
+            int unlockedForThisZone = Mathf.Clamp(remainingSlots, 0, zone.MaxCells);
+            zone.RefreshVisibleCells(unlockedForThisZone);
+
+            remainingSlots -= unlockedForThisZone;
+        }
+    }
+
+    private int GetUnlockedSlotsForZone(PlantingZone targetZone)
+    {
+        if (plantingZones == null || plantingCapacity == null || targetZone == null)
+            return 0;
+
+        int remainingSlots = plantingCapacity.MaxPlantingSlots;
+
+        for (int i = 0; i < plantingZones.Length; i++)
+        {
+            PlantingZone zone = plantingZones[i];
+
+            if (zone == null)
+                continue;
+
+            int unlockedForThisZone = Mathf.Clamp(remainingSlots, 0, zone.MaxCells);
+
+            if (zone == targetZone)
+                return unlockedForThisZone;
+
+            remainingSlots -= unlockedForThisZone;
+        }
+
+        return 0;
     }
 }

@@ -1,0 +1,99 @@
+{
+    "version": 1,
+    "name": "Farming6Mulator_InputActions",
+    "maps": [
+        {
+            "name": "Gameplay",
+            "id": "66a650ac-5397-46ec-b1ab-4801f45bac9b",
+            "actions": [
+                {
+                    "name": "ToggleInventory",
+                    "type": "Button",
+                    "id": "a97ea1ed-ebd0-409d-a390-a4726e621677",
+                    "expectedControlType": "",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
+                },
+                {
+                    "name": "Plant",
+                    "type": "Button",
+                    "id": "c3f0bf57-2f36-4950-adef-297923cef9d6",
+                    "expectedControlType": "",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
+                }
+            ],
+            "bindings": [
+                {
+                    "name": "",
+                    "id": "f9b0c371-114f-4faf-b5ae-e0d8f834d697",
+                    "path": "<XRController>{RightHand}/secondaryButton",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "ToggleInventory",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "80fb16ea-b1ad-4469-99e4-b14e37b3aa0d",
+                    "path": "<XRController>{RightHand}/secondaryTouch",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "ToggleInventory",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "a3f48dbf-f9f6-4dd1-bd24-c4fcfbcf1e2a",
+                    "path": "<QuestTouchPlusController>{RightHand}/secondaryButton",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "ToggleInventory",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "eb5fc5fd-d326-4777-b23b-2d759e277f72",
+                    "path": "<QuestTouchPlusController>{LeftHand}/secondaryButton",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "ToggleInventory",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "f7a6f3a4-8d73-461a-ae47-383bc7829fb6",
+                    "path": "<XRController>{RightHand}/triggerPressed",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "Plant",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "5db7c070-da19-48a3-af9b-cd142e5749b1",
+                    "path": "<QuestTouchPlusController>{RightHand}/triggerPressed",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "Plant",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                }
+            ]
+        }
+    ],
+    "controlSchemes": []
+}
